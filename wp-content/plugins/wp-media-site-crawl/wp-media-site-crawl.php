@@ -44,43 +44,61 @@ function wpmedia_site_crawl_options() {
         wp_die( __( 'You do not have permission to access these settings.' ) );
     }
 
+    echo '<style>';
+	echo '	ul {';
+	echo '		margin-left: 3%;';
+	echo '	}';
+
+	echo '	h3 {';
+	echo '		margin-top: 2%;';
+	echo '	}';
+	echo '';
+
+	echo '</style>';
+
     echo '<h1>Site Crawl Settings</h1>';
     echo '<h2>Start a site crawl, view a sitemap, and show your sitemap to users</h2>';
 
     echo '<div>';
-    echo '<p>
-            Clicking on Start Site Crawl will start a crawl of your site, and set a job to re-crawl your site every
-            hour. This will create a sitemap that is visible to you and your users. At the start of each crawl,
-            the old data will be removed and an entirely new set of data will be stored.
-          </p>';
-    echo '';
 
-	//TODO disable when there is a cron set
+    echo '	<p>';
+    echo '		Clicking on Start Site Crawl will start a crawl of your site, and set a job to re-crawl your site every
+          		hour. This will create a sitemap that is visible to you and your users. At the start of each crawl,
+          		the old data will be removed and an entirely new set of data will be stored.';
+	echo '	</p>';
+
+	//TODO remove this once sitemap.html is working
+//	echo '	<p>';
+//	echo '		To display this sitemap to your users use the shortcode [ wpmedia_sitemap ] (no spaces, including brackets)
+//				where desired.';
+//	echo '	</p>';
+
 	echo '<form method="POST">';
     echo '<button type="submit" name="site-crawl">Start Site Crawl</button>';
 	echo '</form>';
 
-	echo '<script>';
-	echo 'jQuery(document).ready(function( $ ) {';
-	echo '$("button").click(function(){';
-	echo '$("button").attr("disabled", "true");';
-	echo '});';
-
-	//TODO this isn't right. Fix it.
-	if( wp_next_scheduled( 'crawl_cron' ) ) {
-		echo '$("button").attr("disabled", "true")';
-	}
-
-	echo '});';
-	echo '</script>';
 
     if( array_key_exists('site-crawl', $_POST) ) {
-    	crawl_site();
+    	manual_trigger_site_crawl();
     	sitemap();
 	}
 
     //display sitemap
 	echo '<div>' . sitemap() . '</div>';
+
+	//disable button on click, and if cron set, on page load
+    echo '<script>';
+	echo 'jQuery(document).ready(function( $ ) {';
+	echo '	$("button").click(function(){';
+	echo '		$("button").attr("disabled", "true");';
+	echo '	});';
+
+	if( wp_next_scheduled( 'crawl_cron' ) ) {
+		echo '	$("button").attr("disabled", "true")';
+	}
+
+	echo '});';
+	echo '</script>';
 }
 
 function manual_trigger_site_crawl() {
@@ -99,10 +117,6 @@ function delete_old_data() {
     $wpdb->query($sql);
 }
 
-//START CRON
-add_action('crawl_cron', 'crawl_site');
-add_filter( 'cron_schedules', 'crawl_site_hourly' );
-
 function set_cron() {
     $schedules['hourly'] = array(
         'interval' => 3600,
@@ -112,10 +126,11 @@ function set_cron() {
     return $schedules;
 }
 
+add_action('crawl_cron', 'crawl_site');
+
 if ( ! wp_next_scheduled( 'crawl_cron' ) ) {
     wp_schedule_event( time(), 'hourly', 'crawl_cron' );
 }
-//END CRON
 
 function crawl_site() {
     delete_old_data();
@@ -145,13 +160,17 @@ function crawl_site() {
         $link_value = $site_a_tag->getAttribute('href');
 
         //make sure there is a link and that it's not an anchor link
-        if ( '' === strlen(trim($link_value)) ) {
+        if( '' === strlen(trim($link_value)) ) {
             continue;
         }
 
-        if ( '#' === $link_value[0] ) {
+        if( '#' === $link_value[0] ) {
             continue;
         }
+
+		if( !parse_url($link_value, PHP_URL_PATH) ) {
+			continue;
+		}
 
         $sql = 'INSERT INTO ' .$table .' (`link_text`, `link`)
             VALUES ("'. $link_text . '", "' . $link_value . '");';
@@ -166,6 +185,7 @@ function crawl_site() {
     }
 }
 
+//create sitemap and shortcode
 function sitemap() {
     global $wpdb;
     $table = $wpdb->prefix . 'wpmedia_site_crawl';
@@ -174,25 +194,32 @@ function sitemap() {
 
     $stored_links = $wpdb->get_results($sql);
 
-    //TODO revisit this because the home page ends up in there a lot
     if ($stored_links) {
-		echo '<a href="' . get_site_url() . '">' . get_bloginfo('name') . '</a>';
-		echo '<ul>';
+
+    	$site_url = get_site_url();
+    	$blog_name = get_bloginfo('name');
+
+    	$sitemap_html = '<h3><a href="' . $site_url . '">' . $blog_name . '</a></h3>
+		<ul>';
 
 		foreach ($stored_links as $stored_link) {
-			echo '<li><a href="'. $stored_link->link .'">' . $stored_link->link_text . '</a></li>';
+			$sitemap_html .= '<li><a href="'. $stored_link->link .'">' . $stored_link->link_text . '</a></li>';
 		}
 
-		echo '</ul>';
+		$sitemap_html .= '</ul>';
     }
-    //TODO display map to user
+
+    file_put_contents('sitemap.html', $sitemap_html);
+    return $sitemap_html;
 }
 
+//TODO remove this once sitemap.html is working
+//add_shortcode('wpmedia_sitemap', 'sitemap');
 
-//Deactivation tasks: create database for storage
-register_deactivation_hook( __FILE__, 'wpmedia_uninstall' );
 
-function wpmedia_uninstall() {
+//Deactivation tasks: delete custom table, remove cron
+
+function wpmedia_deactivate() {
     global $wpdb;
     $table = $wpdb->prefix . 'wpmedia_site_crawl';
 
@@ -200,6 +227,11 @@ function wpmedia_uninstall() {
 
     $wpdb->query($sql);
 
+	$timestamp = wp_next_scheduled( 'crawl_cron' );
+	wp_unschedule_event( $timestamp, 'crawl_cron' );
+
     delete_option('my_plugin_db_version');
 
 }
+
+register_deactivation_hook( __FILE__, 'wpmedia_deactivate' );
