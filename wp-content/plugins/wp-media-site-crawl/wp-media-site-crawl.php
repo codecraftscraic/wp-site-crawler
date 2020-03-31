@@ -1,5 +1,8 @@
 <?php
 defined( 'ABSPATH' ) or die( 'No scripts!' );
+require_once( ABSPATH . 'wp-admin/includes/file.php' );
+require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+
 /**
  * Plugin Name: WP Media Site Crawl
  * Plugin URI: http://www.github.com/codecraftscraic/wp-media-site-crawl
@@ -10,10 +13,9 @@ defined( 'ABSPATH' ) or die( 'No scripts!' );
  */
 
 class WpSiteCrawl {
-	function __construct()
-	{
+	function __construct() {
 		//activation
-		register_activation_hook( __FILE__, array($this, 'wpmedia_install' ) );
+		register_activation_hook( __FILE__, array($this, 'wpmedia_activate' ) );
 
 		//create the plugin options menu item
 		add_action( 'admin_menu', array($this, 'wpmedia_site_crawl_menu') );
@@ -25,12 +27,9 @@ class WpSiteCrawl {
 
 		//deactivation
 		register_deactivation_hook( __FILE__, array($this, 'wpmedia_deactivate') );
-
-		//TODO remove this once sitemap.html is working
-		//add_shortcode('wpmedia_sitemap', 'sitemap');
 	}
 
-	function wpmedia_install() {
+	function wpmedia_activate() {
 		global $wpdb;
 		$table = $wpdb->prefix . 'wpmedia_site_crawl';
 
@@ -44,7 +43,6 @@ class WpSiteCrawl {
         PRIMARY KEY id (id)
     ) $charset;";
 
-		require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 		dbDelta( $sql );
 	}
 
@@ -59,17 +57,7 @@ class WpSiteCrawl {
 			wp_die( __( 'You do not have permission to access these settings.' ) );
 		}
 
-		echo '<style>';
-		echo '	ul {';
-		echo '		margin-left: 3%;';
-		echo '	}';
-
-		echo '	h3 {';
-		echo '		margin-top: 2%;';
-		echo '	}';
-		echo '';
-
-		echo '</style>';
+		$sitemap_url = get_site_url() . '/wp-content/plugins/wp-media-site-crawl/sitemap.html';
 
 		echo '<h1>Site Crawl Settings</h1>';
 		echo '<h2>Start a site crawl, view a sitemap, and show your sitemap to users</h2>';
@@ -82,11 +70,10 @@ class WpSiteCrawl {
           		the old data will be removed and an entirely new set of data will be stored.';
 		echo '	</p>';
 
-		//TODO remove this once sitemap.html is working
-//	echo '	<p>';
-//	echo '		To display this sitemap to your users use the shortcode [ wpmedia_sitemap ] (no spaces, including brackets)
-//				where desired.';
-//	echo '	</p>';
+		echo '	<p>';
+		echo '		After your initial crawl, a user visible sitemap can be found at <a target="_blank" href="' . $sitemap_url . '">'
+					. $sitemap_url . '</a>';
+		echo '	</p>';
 
 		echo '<form method="POST">';
 		echo '<button type="submit" name="site-crawl">Start Site Crawl</button>';
@@ -133,13 +120,27 @@ class WpSiteCrawl {
 	}
 
 	function crawl_site() {
+		global $wp_filesystem;
+		global $wpdb;
+
+		WP_Filesystem();
+
 		$this->delete_old_data();
 
-		global $wpdb;
 		$table = $wpdb->prefix . 'wpmedia_site_crawl';
 
 		//get the website homepage
 		$site_html = file_get_contents(get_site_url());
+
+		//save site homepage as html
+		$directory = $wp_filesystem->find_folder(WP_PLUGIN_DIR . "/wp-media-site-crawl");
+
+		$file = trailingslashit($directory) . "index.html";
+
+		//delete old cached file
+		wp_delete_file ($file);
+
+		$wp_filesystem->put_contents( $file, $site_html, 0644);
 
 		//create new DOM to read homepage contents
 		$site_dom = new DOMDocument;
@@ -159,7 +160,7 @@ class WpSiteCrawl {
 			$link_text = $site_a_tag->nodeValue;
 			$link_value = $site_a_tag->getAttribute('href');
 
-			//make sure there is a link and that it's not an anchor link
+			//make sure there is a link, not an anchor link, and not the homepage base url
 			if( '' === strlen(trim($link_value)) ) {
 				continue;
 			}
@@ -172,22 +173,27 @@ class WpSiteCrawl {
 				continue;
 			}
 
-			$sql = 'INSERT INTO ' .$table .' (`link_text`, `link`)
+			$sql = 'INSERT INTO ' . $table .' (`link_text`, `link`)
             VALUES ("'. $link_text . '", "' . $link_value . '");';
 
 			if ( $sql ) {
 				$wpdb->query($sql);
 				continue;
 			} else {
-				//TODO ERROR REPORTING
-				break;
+				return 'There has been an error, please try again later.';
 			}
 		}
 	}
 
-//create sitemap and shortcode
+	//create sitemap
 	function sitemap() {
 		global $wpdb;
+		global $wp_filesystem;
+		WP_Filesystem();
+
+		$sitemap_html = '<style> ul {margin-left: 3%; list-style-type: none;} h3 {margin-top: 2%;}
+						a{color:#0073aa; font-family: sans-serif;} </style>';
+
 		$table = $wpdb->prefix . 'wpmedia_site_crawl';
 
 		$sql = 'SELECT * FROM ' . $table;
@@ -195,12 +201,10 @@ class WpSiteCrawl {
 		$stored_links = $wpdb->get_results($sql);
 
 		if ($stored_links) {
-
 			$site_url = get_site_url();
 			$blog_name = get_bloginfo('name');
 
-			$sitemap_html = '<h3><a href="' . $site_url . '">' . $blog_name . '</a></h3>
-		<ul>';
+			$sitemap_html .= '<h3><a href="' . $site_url . '">' . $blog_name . '</a></h3><ul>';
 
 			foreach ($stored_links as $stored_link) {
 				$sitemap_html .= '<li><a href="'. $stored_link->link .'">' . $stored_link->link_text . '</a></li>';
@@ -209,12 +213,19 @@ class WpSiteCrawl {
 			$sitemap_html .= '</ul>';
 		}
 
-		file_put_contents('sitemap.html', $sitemap_html);
+		$directory = $wp_filesystem->find_folder(WP_PLUGIN_DIR . "/wp-media-site-crawl");
+
+		$file = trailingslashit($directory) . "sitemap.html";
+
+		//delete old sitemap
+		wp_delete_file ($file);
+
+		$wp_filesystem->put_contents( $file, $sitemap_html, 0644);
+
 		return $sitemap_html;
 	}
 
-//Deactivation tasks: delete custom table, remove cron
-
+	//Deactivation tasks: delete custom table, remove cron
 	function wpmedia_deactivate() {
 		global $wpdb;
 		$table = $wpdb->prefix . 'wpmedia_site_crawl';
@@ -226,7 +237,7 @@ class WpSiteCrawl {
 		$timestamp = wp_next_scheduled( 'crawl_cron' );
 		wp_unschedule_event( $timestamp, 'crawl_cron' );
 
-		delete_option('my_plugin_db_version');
+		delete_option('wpmedia-site-crawl-settings');
 
 	}
 }
