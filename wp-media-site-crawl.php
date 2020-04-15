@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) or die( 'No scripts!' );
 require_once( ABSPATH . 'wp-admin/includes/file.php' );
-require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 
 /**
  * Plugin Name: WP Media Site Crawl
