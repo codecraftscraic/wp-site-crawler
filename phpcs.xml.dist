@@ -26,10 +26,37 @@
 
 	<rule ref="WordPress">
         <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase" />
+
+        <!-- Exclude formatting rules for the code review. -->
+        <exclude name="PEAR.Functions.FunctionCallSignature.SpaceAfterOpenBracket"/>
+        <exclude name="PEAR.Functions.FunctionCallSignature.SpaceBeforeCloseBracket"/>
+		<exclude name="PEAR.Functions.FunctionCallSignature.SpaceBeforeOpenBracket"/>
+		<exclude name="PEAR.Functions.FunctionCallSignature.ContentAfterOpenBracket"/>
+		<exclude name="PEAR.Functions.FunctionCallSignature.MultipleArguments"/>
+		<exclude name="PEAR.Functions.FunctionCallSignature.CloseBracketLine"/>
+
+		<exclude name="Generic.WhiteSpace.ScopeIndent.Incorrect"/>
+		<exclude name="Generic.Formatting.MultipleStatementAlignment.NotSameWarning"/>
+		<exclude name="Generic.Arrays.DisallowLongArraySyntax.Found"/>
+
+		<exclude name="Squiz.WhiteSpace.SuperfluousWhitespace.EmptyLines"/>
+		<exclude name="Squiz.ControlStructures.ControlSignature.SpaceAfterKeyword"/>
+		<exclude name="Squiz.Strings.ConcatenationSpacing.PaddingFound"/>
+
+        <exclude name="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound"/>
+        <exclude name="WordPress.Arrays.ArrayDeclarationSpacing.NoSpaceAfterArrayOpener"/>
+        <exclude name="WordPress.Arrays.ArrayDeclarationSpacing.NoSpaceBeforeArrayCloser"/>
+        <exclude name="WordPress.WhiteSpace.ControlStructureSpacing.NoSpaceAfterStructureOpen"/>
+        <exclude name="WordPress.WhiteSpace.ControlStructureSpacing.NoSpaceBeforeCloseParenthesis"/>
+        <exclude name="WordPress.WhiteSpace.ControlStructureSpacing.NoSpaceAfterOpenParenthesis"/>
+        <exclude name="WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase"/>
+        <exclude name="WordPress.WhiteSpace.ControlStructureSpacing.NoSpaceBeforeOpenParenthesis"/>
+        <exclude name="WordPress.WhiteSpace.OperatorSpacing.NoSpaceAfter"/>
+        <exclude name="WordPress.Classes.ClassInstantiation.MissingParenthesis"/>
 	</rule>
     <rule ref="WordPress.WP.I18n">
         <properties>
-            <property name="text_domain" type="array" value="rocket" />
+            <property name="text_domain" type="array" value="wp-media-site-crawl" />
         </properties>
     </rule>
     <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
@@ -46,6 +73,17 @@
 		<exclude name="Squiz.Commenting.FileComment.Missing"/>
 		<exclude name="Squiz.Commenting.FileComment.MissingPackageTag"/>
 		<exclude name="Squiz.Commenting.ClassComment.Missing"/>
+
+		<!-- Exclude documentation rules for the code review. -->
+		<exclude name="Squiz.Commenting.ClassComment.SpacingAfter"/>
+		<exclude name="Squiz.Commenting.FunctionComment.Missing"/>
+		<exclude name="Squiz.Commenting.InlineComment.NoSpaceBefore"/>
+		<exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+		<exclude name="Generic.Commenting.DocComment.MissingShort"/>
+		<exclude name="Squiz.Commenting.FunctionComment.WrongStyle"/>
+		<exclude name="Squiz.Commenting.InlineComment.SpacingBefore"/>
+		<exclude name="Squiz.Commenting.FileComment.SpacingAfterComment"/>
+		<exclude name="Squiz.PHP.CommentedOutCode.Found"/>
 	</rule>
 
 	<!-- Rules: WordPress Coding Standards - see
