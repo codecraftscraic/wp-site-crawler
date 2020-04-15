@@ -1,7 +1,16 @@
 <?php
+// @CODEREVIEW: use || instead.
 defined( 'ABSPATH' ) or die( 'No scripts!' );
-require_once( ABSPATH . 'wp-admin/includes/file.php' );
-require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
+
+/**
+ * @CODEREVIEW:
+ *
+ * 1. require and require_once are not functions.
+ * 2. Use WP_Filesystem_Direct. See our implementation here https://github.com/wp-media/wp-rocket/blob/master/inc/functions/files.php#L1110-L1113
+ * 3. Load these files when needed.
+ */
+require_once ABSPATH . 'wp-admin/includes/file.php';
+require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
 /**
  * Plugin Name: WP Media Site Crawl
@@ -12,8 +21,19 @@ require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
  * Author URI: http://www.nextjenmobile.com
  */
 
+/**
+ * @CODEREVIEW: Use namespace. Why?
+ *
+ * 1. Best practice for modern PHP development.
+ * 2. Reduces the risk of name conflicts.
+ */
+
 class WpSiteCrawl {
 	function __construct() {
+		/**
+		 * @CODEREVIEW: Hook event registrations should be in a public method instead of in the constructor.
+		 * Why? Testing.
+		 */
 		//activation
 		register_activation_hook( __FILE__, array($this, 'wpmedia_activate' ) );
 
@@ -29,6 +49,9 @@ class WpSiteCrawl {
 		register_deactivation_hook( __FILE__, array($this, 'wpmedia_deactivate') );
 	}
 
+	/**
+	 * @CODEREVIEW: methods do not need to be prefixed. Instead, name each to tell us what the expected behavior will be.
+	 */
 	function wpmedia_activate() {
 		global $wpdb;
 		$table = $wpdb->prefix . 'wpmedia_site_crawl';
@@ -47,6 +70,7 @@ class WpSiteCrawl {
 	}
 
 	function wpmedia_site_crawl_menu() {
+		// @CODEREVIEW: String literals should be internationalized. How? Use __( 'Site literal', 'plugin-text-domain' );
 		add_options_page( 'Site Crawl Settings', 'Site Crawl', 'manage_options',
 			'wpmedia-site-crawl-settings', array($this, 'wpmedia_site_crawl_options'));
 	}
@@ -54,11 +78,26 @@ class WpSiteCrawl {
 	//create options page
 	function wpmedia_site_crawl_options() {
 		if ( !current_user_can( 'manage_options' ) ) {
+			// @CODEREVIEW: Add your plugin's text domain as the 2nd arg passed into __().
 			wp_die( __( 'You do not have permission to access these settings.' ) );
 		}
 
+
 		$sitemap_url = get_site_url() . '/wp-content/plugins/wp-media-site-crawl/sitemap.html';
 
+		// @CODEREVIEW: String literals should be internationalized and
+		/**
+		 * @CODEREVIEW:
+		 *
+		 * 1.   Security Issue: variables must be escaped before rendering out to the browser.
+		 *      For the `$sitemap_url`, use `esc_url()`. @link https://developer.wordpress.org/reference/functions/esc_url/
+		 * 2.   Security Issue: no nonce field added to the form.
+		 *      @link https://developer.wordpress.org/reference/functions/wp_nonce_field/
+		 * 3.   Separation of concerns: The HTML should be contained in a view file.
+		 *      See the example I provided in the views/ folder.
+		 * 4.   String literals should be internationalized and escaped with `esc_html_e()`. @link https://developer.wordpress.org/reference/functions/esc_html_e/
+		 * 5.   Instead of echoing, leverage raw HTML. Why? Easier to read, understand, and maintain.
+		 */
 		echo '<h1>Site Crawl Settings</h1>';
 		echo '<h2>Start a site crawl, view a sitemap, and show your sitemap to users</h2>';
 
@@ -114,12 +153,23 @@ class WpSiteCrawl {
 
 		$target_time = strtotime('-1 hour');
 
+		/**
+		 * @CODEREVIEW: Security Issue.
+		 *
+		 * The variables are not sanitized before storing in the database. Use $wpdb->prepare().
+		 * @link https://developer.wordpress.org/reference/classes/wpdb/prepare/
+		 */
 		$sql = 'DELETE FROM ' . $table . ' WHERE `timestamp` > ' . $target_time;
 
 		$wpdb->query($sql);
 	}
 
 	function crawl_site() {
+		/**
+		 * @CODEREVIEW: Decoupling.
+		 *
+		 * Instead of using globals, inject both into the class and store as properties.
+		 */
 		global $wp_filesystem;
 		global $wpdb;
 
@@ -130,14 +180,32 @@ class WpSiteCrawl {
 		$table = $wpdb->prefix . 'wpmedia_site_crawl';
 
 		//get the website homepage
-		$site_html = file_get_contents(get_site_url());
+		/**
+		 * @CODEREVIEW:
+		 *
+		 * 1. Be consistent. Use the filesystem's get_contents() here.
+		 * 2. Another approach is to use wp_remote_get().
+		 */
+		$site_html = file_get_contents(get_site_url()); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 
+		/**
+		 * @CODEREVIEW:
+		 *
+		 * Why search for the index.html file? Your implementation is storing it in this plugin's root directory.
+		 * This plugin's file is also in the same directory.
+		 *
+		 *  Instead, simplify.
+		 */
 		//save site homepage as html
-		$directory = $wp_filesystem->find_folder(WP_PLUGIN_DIR . "/wp-media-site-crawl");
-
-		$file = trailingslashit($directory) . "index.html";
+//		$directory = $wp_filesystem->find_folder(WP_PLUGIN_DIR . "/wp-media-site-crawl");
+//
+//		$file = trailingslashit($directory) . "index.html";
+		$file = __DIR__ . '/index.html';
 
 		//delete old cached file
+		/**
+		 * @CODEREVIEW: Be consistent. Use the filesystem to delete the file.
+		 */
 		wp_delete_file ($file);
 
 		$wp_filesystem->put_contents( $file, $site_html, 0644);
@@ -169,10 +237,16 @@ class WpSiteCrawl {
 				continue;
 			}
 
-			if( !parse_url($link_value, PHP_URL_PATH) ) {
+			if( !parse_url($link_value, PHP_URL_PATH) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
 				continue;
 			}
 
+			/**
+			 * @CODEREVIEW: Security Issue.
+			 *
+			 * The values/variables are not sanitized before storing in the database. Use $wpdb->prepare().
+			 * @link https://developer.wordpress.org/reference/classes/wpdb/prepare/
+			 */
 			$sql = 'INSERT INTO ' . $table .' (`link_text`, `link`)
             VALUES ("'. $link_text . '", "' . $link_value . '");';
 
@@ -180,6 +254,7 @@ class WpSiteCrawl {
 				$wpdb->query($sql);
 				continue;
 			} else {
+				// @CODEREVIEW: String literal should be internationalized.
 				return 'There has been an error, please try again later.';
 			}
 		}
@@ -187,6 +262,11 @@ class WpSiteCrawl {
 
 	//create sitemap
 	function sitemap() {
+		/**
+		 * @CODEREVIEW: Decoupling.
+		 *
+		 * Instead of using globals, inject both into the class and store as properties.
+		 */
 		global $wpdb;
 		global $wp_filesystem;
 		WP_Filesystem();
@@ -213,10 +293,25 @@ class WpSiteCrawl {
 			$sitemap_html .= '</ul>';
 		}
 
-		$directory = $wp_filesystem->find_folder(WP_PLUGIN_DIR . "/wp-media-site-crawl");
+		/**
+		 * @CODEREVIEW:
+		 *
+		 * Why search for the sitemap file? Your implementation is storing it in this plugin's root directory.
+		 * This plugin's file is also in the same directory.
+		 *
+		 *  Instead, simplify.
+		 */
+//		$directory = $wp_filesystem->find_folder(WP_PLUGIN_DIR . "/wp-media-site-crawl");
+//
+//		$file = trailingslashit($directory) . "sitemap.html";
+		$file = __DIR__ . '/sitemap.html';
 
-		$file = trailingslashit($directory) . "sitemap.html";
-
+		/**
+		 * @CODEREVIEW: You can also use the delete method that's built into $wp_filesystem to be consistent
+		 * with the implementation. How?
+		 *
+		 * $wp_filesystem->delete( $file );
+		 */
 		//delete old sitemap
 		wp_delete_file ($file);
 
@@ -234,6 +329,9 @@ class WpSiteCrawl {
 
 		$wpdb->query($sql);
 
+		/**
+		 * @CODEREVIEW: Good job cleaning up the CRON jobs and option.
+		 */
 		$timestamp = wp_next_scheduled( 'crawl_cron' );
 		wp_unschedule_event( $timestamp, 'crawl_cron' );
 
@@ -242,4 +340,9 @@ class WpSiteCrawl {
 	}
 }
 
+/**
+ * @CODEREVIEW: Instantiating an object in the same file with the class is not a best practice.
+ *
+ * Why? The code is not testable.
+ */
 new WpSiteCrawl();
